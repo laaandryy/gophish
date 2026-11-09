@@ -47,14 +47,38 @@ func TestDefaultDeniedImport(t *testing.T) {
 	}
 }
 
-func TestDefaultAllowedImport(t *testing.T) {
+func TestDefaultDeniedLoopbackImport(t *testing.T) {
 	ctx := setupTest(t)
 	h := "<html><head></head><body><img src=\"/test.png\"/></body></html>"
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintln(w, h)
 	}))
 	defer ts.Close()
+	// The test server listens on 127.0.0.1, which is blocked by default for
+	// site imports to prevent reading services bound to localhost.
 	response := makeImportRequest(ctx, []string{}, ts.URL)
+	expectedCode := http.StatusBadRequest
+	if response.Code != expectedCode {
+		t.Fatalf("incorrect status code received. expected %d got %d", expectedCode, response.Code)
+	}
+	got := &models.Response{}
+	err := json.NewDecoder(response.Body).Decode(got)
+	if err != nil {
+		t.Fatalf("error decoding body: %v", err)
+	}
+	if !strings.Contains(got.Message, "upstream connection denied") {
+		t.Fatalf("incorrect response error provided: %s", got.Message)
+	}
+}
+
+func TestAllowedLoopbackImport(t *testing.T) {
+	ctx := setupTest(t)
+	h := "<html><head></head><body><img src=\"/test.png\"/></body></html>"
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintln(w, h)
+	}))
+	defer ts.Close()
+	response := makeImportRequest(ctx, []string{"127.0.0.1"}, ts.URL)
 	expectedCode := http.StatusOK
 	if response.Code != expectedCode {
 		t.Fatalf("incorrect status code received. expected %d got %d", expectedCode, response.Code)

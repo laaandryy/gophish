@@ -357,7 +357,7 @@ var renderDevice = function (event_details) {
 
     var browserString = '<div class="timeline-device-browser"><span class="fa fa-stack">' +
         '<i class="fa fa-' + escapeHtml(browserIcon) + ' fa-stack-1x"></i></span> ' +
-        deviceBrowser + ' ' + browserVersion + '</div>'
+        escapeHtml(deviceBrowser) + ' ' + escapeHtml(browserVersion) + '</div>'
 
     detailsString += browserString
     detailsString += '</div>'
@@ -422,7 +422,7 @@ function renderTimeline(data) {
                 if (details.error) {
                     results += '<div class="timeline-event-details"><i class="fa fa-caret-right"></i> View Details</div>'
                     results += '<div class="timeline-event-results">'
-                    results += '<span class="label label-default">Error</span> ' + details.error
+                    results += '<span class="label label-default">Error</span> ' + escapeHtml(details.error)
                     results += '</div>'
                 }
             }

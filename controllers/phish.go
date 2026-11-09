@@ -15,6 +15,7 @@ import (
 	ctx "github.com/gophish/gophish/context"
 	"github.com/gophish/gophish/controllers/api"
 	log "github.com/gophish/gophish/logger"
+	mid "github.com/gophish/gophish/middleware"
 	"github.com/gophish/gophish/models"
 	"github.com/gophish/gophish/util"
 	"github.com/gorilla/handlers"
@@ -123,7 +124,17 @@ func (ps *PhishingServer) registerRoutes() {
 
 	// Respect X-Forwarded-For and X-Real-IP headers in case we're behind a
 	// reverse proxy.
-	phishHandler = handlers.ProxyHeaders(phishHandler)
+	// Phishing servers are often deployed behind CDNs or load balancers, so
+	// every client is trusted unless trusted_proxies is configured. Setting
+	// it prevents visitors from spoofing the IP recorded for campaign events.
+	trustedProxies := ps.config.TrustedProxies
+	if len(trustedProxies) == 0 {
+		trustedProxies = []string{"*"}
+	}
+	phishHandler, err := mid.TrustedProxyHeaders(trustedProxies, phishHandler)
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	// Setup logging
 	phishHandler = handlers.CombinedLoggingHandler(log.Writer(), phishHandler)
@@ -261,6 +272,7 @@ func (ps *PhishingServer) PhishHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Error(err)
 		http.NotFound(w, r)
+		return
 	}
 	renderPhishResponse(w, r, ptx, p)
 }

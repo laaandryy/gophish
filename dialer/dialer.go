@@ -33,6 +33,9 @@ func (d *RestrictedDialer) AllowedHosts() []string {
 
 // SetAllowedHosts sets the list of allowed hosts or IP ranges for the dialer.
 func (d *RestrictedDialer) SetAllowedHosts(allowed []string) error {
+	// Replace (rather than extend) the current list so that calling this
+	// function twice doesn't silently keep previously allowed ranges.
+	allowedHosts := []*net.IPNet{}
 	for _, ipRange := range allowed {
 		// For flexibility, try to parse as an IP first since this will
 		// undoubtedly cause issues. If it works, then just append the
@@ -48,8 +51,9 @@ func (d *RestrictedDialer) SetAllowedHosts(allowed []string) error {
 		if err != nil {
 			return fmt.Errorf("provided ip range is not valid CIDR notation: %v", err)
 		}
-		d.allowedHosts = append(d.allowedHosts, parsed)
+		allowedHosts = append(allowedHosts, parsed)
 	}
+	d.allowedHosts = allowedHosts
 	return nil
 }
 
@@ -57,6 +61,34 @@ func (d *RestrictedDialer) SetAllowedHosts(allowed []string) error {
 // addresses allowed by the DefaultDialer.
 func Dialer() *net.Dialer {
 	return DefaultDialer.Dialer()
+}
+
+// StrictDialer returns a net.Dialer that, in addition to the default deny
+// list, blocks loopback addresses unless they are explicitly allowed with
+// SetAllowedHosts.
+func StrictDialer() *net.Dialer {
+	return DefaultDialer.StrictDialer()
+}
+
+// StrictDialer returns a net.Dialer that behaves like Dialer, except that
+// loopback addresses (127.0.0.0/8, ::1, 0.0.0.0/8) are also blocked by
+// default. When allowed hosts are configured, every internal range is blocked
+// except the allowed ones, exactly like Dialer.
+//
+// It is meant for features that return the fetched content to the user, such
+// as the "Import Site" feature, where reaching services bound to localhost
+// (including the Gophish admin server itself) would be a server-side request
+// forgery with full read access.
+func (d *RestrictedDialer) StrictDialer() *net.Dialer {
+	denyList := append(append([]string{}, defaultDeny...), loopback...)
+	if len(d.allowedHosts) > 0 {
+		denyList = allInternal
+	}
+	return &net.Dialer{
+		Timeout:   30 * time.Second,
+		KeepAlive: 30 * time.Second,
+		Control:   restrictedControlWithDenyList(d.allowedHosts, denyList),
+	}
 }
 
 // Dialer returns a net.Dialer that restricts outbound connections to only the
@@ -82,7 +114,16 @@ func (d *RestrictedDialer) Dialer() *net.Dialer {
 // defaultDeny represents the list of IP ranges that we want to block unless
 // explicitly overriden.
 var defaultDeny = []string{
-	"169.254.0.0/16", // Link-local (used for VPS instance metadata)
+	"169.254.0.0/16",    // Link-local (used for VPS instance metadata)
+	"fd00:ec2::254/128", // AWS IPv6 instance metadata endpoint
+}
+
+// loopback represents the loopback and "this host" ranges.
+var loopback = []string{
+	"0.0.0.0/8",   // "This host" (0.0.0.0 reaches local services)
+	"127.0.0.0/8", // IPv4 loopback
+	"::1/128",     // IPv6 loopback
+	"::/128",      // Unspecified address
 }
 
 // allInternal represents all internal hosts such that the only connections
@@ -108,6 +149,7 @@ var allInternal = []string{
 	"::ffff:0:0:0/96",    // IPv4 translated addresses.
 	"fe80::/10",          // IPv6 link-local
 	"fc00::/7",           // IPv6 unique local addr
+	"fd00:ec2::254/128",  // AWS IPv6 instance metadata endpoint
 }
 
 type dialControl = func(network, address string, c syscall.RawConn) error
@@ -118,6 +160,13 @@ type restrictedDialer struct {
 }
 
 func restrictedControl(allowed []*net.IPNet) dialControl {
+	return restrictedControlWithDenyList(allowed, nil)
+}
+
+// restrictedControlWithDenyList returns a dial control function. If denied is
+// nil, the deny list is chosen as before: only the default deny list when no
+// hosts are allowed, every internal range otherwise.
+func restrictedControlWithDenyList(allowed []*net.IPNet, denied []string) dialControl {
 	return func(network string, address string, conn syscall.RawConn) error {
 		if !(network == "tcp4" || network == "tcp6") {
 			return fmt.Errorf("%s is not a safe network type", network)
@@ -133,9 +182,12 @@ func restrictedControl(allowed []*net.IPNet) dialControl {
 			return fmt.Errorf("%s is not a valid IP address", host)
 		}
 
-		denyList := defaultDeny
-		if len(allowed) > 0 {
-			denyList = allInternal
+		denyList := denied
+		if denyList == nil {
+			denyList = defaultDeny
+			if len(allowed) > 0 {
+				denyList = allInternal
+			}
 		}
 
 		for _, ipRange := range allowed {

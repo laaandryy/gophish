@@ -32,6 +32,13 @@ if [ -n "${ADMIN_TRUSTED_ORIGINS+set}" ] ; then
         cat config.json.tmp > config.json
 fi
 
+if [ -n "${ADMIN_TRUSTED_PROXIES+set}" ] ; then
+    jq -r \
+        --arg ADMIN_TRUSTED_PROXIES "${ADMIN_TRUSTED_PROXIES}" \
+        '.admin_server.trusted_proxies = ($ADMIN_TRUSTED_PROXIES|split(","))' config.json > config.json.tmp && \
+        cat config.json.tmp > config.json
+fi
+
 # set config for phish_server
 if [ -n "${PHISH_LISTEN_URL+set}" ] ; then
     jq -r \
@@ -58,6 +65,13 @@ if [ -n "${PHISH_KEY_PATH+set}" ] ; then
         cat config.json.tmp > config.json
 fi
 
+if [ -n "${PHISH_TRUSTED_PROXIES+set}" ] ; then
+    jq -r \
+        --arg PHISH_TRUSTED_PROXIES "${PHISH_TRUSTED_PROXIES}" \
+        '.phish_server.trusted_proxies = ($PHISH_TRUSTED_PROXIES|split(","))' config.json > config.json.tmp && \
+        cat config.json.tmp > config.json
+fi
+
 # set contact_address
 if [ -n "${CONTACT_ADDRESS+set}" ] ; then
     jq -r \
@@ -81,8 +95,11 @@ if [ -n "${DB_FILE_PATH+set}" ] ; then
         cat config.json.tmp > config.json
 fi
 
+# Print the runtime configuration without secrets (the database path can
+# contain MySQL credentials, and the CSRF key must stay private).
 echo "Runtime configuration: "
-cat config.json
+jq '(if .db_path then .db_path = "[redacted]" else . end)
+    | (if .admin_server.csrf_key then .admin_server.csrf_key = "[redacted]" else . end)' config.json
 
 # start gophish
 ./gophish

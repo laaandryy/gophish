@@ -12,6 +12,7 @@ import (
 
 	ctx "github.com/gophish/gophish/context"
 	"github.com/gophish/gophish/models"
+	"github.com/gorilla/mux"
 )
 
 func createUnpriviledgedUser(t *testing.T, slug string) *models.User {
@@ -255,5 +256,45 @@ func TestModifyWithExistingUsername(t *testing.T) {
 	}
 	if got.Message != expectedResponse.Message {
 		t.Fatalf("incorrect error received when setting role. expected %s got %s", expectedResponse.Message, got.Message)
+	}
+}
+
+// TestUnauthorizedSelfUnlock verifies that a user without the ModifySystem
+// permission can't unlock their own account or clear a required password
+// change.
+func TestUnauthorizedSelfUnlock(t *testing.T) {
+	testCtx := setupTest(t)
+	unauthorizedUser := createUnpriviledgedUser(t, models.RoleUser)
+	unauthorizedUser.AccountLocked = true
+	unauthorizedUser.PasswordChangeRequired = true
+	models.PutUser(unauthorizedUser)
+
+	url := fmt.Sprintf("/api/users/%d", unauthorizedUser.Id)
+	payload := &userRequest{
+		Username:               unauthorizedUser.Username,
+		Role:                   models.RoleUser,
+		AccountLocked:          false,
+		PasswordChangeRequired: false,
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("error marshaling userRequest payload: %v", err)
+	}
+	r := httptest.NewRequest(http.MethodPut, url, bytes.NewBuffer(body))
+	// Bypass the API key middleware to make sure the handler itself enforces
+	// the restriction.
+	r = ctx.Set(r, "user", *unauthorizedUser)
+	r = mux.SetURLVars(r, map[string]string{"id": fmt.Sprintf("%d", unauthorizedUser.Id)})
+	w := httptest.NewRecorder()
+	testCtx.apiServer.User(w, r)
+	if w.Code != http.StatusOK {
+		t.Fatalf("unexpected status code. expected %d got %d", http.StatusOK, w.Code)
+	}
+	got, err := models.GetUser(unauthorizedUser.Id)
+	if err != nil {
+		t.Fatalf("error getting user: %v", err)
+	}
+	if !got.AccountLocked || !got.PasswordChangeRequired {
+		t.Fatalf("user was able to change their own lock status (%v) or password change flag (%v)", got.AccountLocked, got.PasswordChangeRequired)
 	}
 }

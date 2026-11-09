@@ -57,7 +57,10 @@ func GetContext(handler http.Handler) http.HandlerFunc {
 		r = ctx.Set(r, "session", session)
 		if id, ok := session.Values["id"]; ok {
 			u, err := models.GetUser(id.(int64))
-			if err != nil {
+			if err != nil || u.AccountLocked || !isSessionValidForUser(session, u) {
+				// Locked accounts are treated as logged out so that locking
+				// an account immediately revokes any existing sessions. The
+				// same applies to sessions created before a password change.
 				r = ctx.Set(r, "user", nil)
 			} else {
 				r = ctx.Set(r, "user", u)
@@ -100,6 +103,10 @@ func RequireAPIKey(handler http.Handler) http.Handler {
 		u, err := models.GetUserByAPIKey(ak)
 		if err != nil {
 			JSONError(w, http.StatusUnauthorized, "Invalid API Key")
+			return
+		}
+		if u.AccountLocked {
+			JSONError(w, http.StatusUnauthorized, "Account Locked")
 			return
 		}
 		r = ctx.Set(r, "user", u)
@@ -194,4 +201,24 @@ func JSONError(w http.ResponseWriter, c int, m string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(c)
 	fmt.Fprintf(w, "%s", cj)
+}
+
+// MoveAPIKeyToHeader moves an api_key passed in the URL query string into the
+// Authorization header before the request is logged or processed.
+//
+// API keys in URLs end up in access logs, browser history and proxy logs.
+// Moving the key keeps backwards compatibility with clients that still use
+// ?api_key=, while making sure the key never reaches the access log.
+// The query string value keeps precedence over the header, as before.
+func MoveAPIKeyToHeader(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		if ak := q.Get("api_key"); ak != "" {
+			q.Del("api_key")
+			r.URL.RawQuery = q.Encode()
+			r.RequestURI = r.URL.RequestURI()
+			r.Header.Set("Authorization", "Bearer "+ak)
+		}
+		next.ServeHTTP(w, r)
+	})
 }

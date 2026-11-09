@@ -114,7 +114,9 @@ func (as *Server) ImportSite(w http.ResponseWriter, r *http.Request) {
 		JSONResponse(w, models.Response{Success: false, Message: err.Error()}, http.StatusBadRequest)
 		return
 	}
-	restrictedDialer := dialer.Dialer()
+	// The cloned page is returned to the user, so internal hosts are always
+	// blocked here unless explicitly allowed with allowed_internal_hosts.
+	restrictedDialer := dialer.StrictDialer()
 	tr := &http.Transport{
 		DialContext: restrictedDialer.DialContext,
 		TLSClientConfig: &tls.Config{

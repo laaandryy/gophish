@@ -16,6 +16,10 @@ type AdminServer struct {
 	CSRFKey              string   `json:"csrf_key"`
 	AllowedInternalHosts []string `json:"allowed_internal_hosts"`
 	TrustedOrigins       []string `json:"trusted_origins"`
+	// TrustedProxies lists the reverse proxies (IPs or CIDR ranges) allowed
+	// to set X-Forwarded-For / X-Real-IP. Defaults to loopback only. Use
+	// "*" to trust every client (legacy behavior, not recommended).
+	TrustedProxies []string `json:"trusted_proxies"`
 }
 
 // PhishServer represents the Phish server configuration details
@@ -24,6 +28,10 @@ type PhishServer struct {
 	UseTLS    bool   `json:"use_tls"`
 	CertPath  string `json:"cert_path"`
 	KeyPath   string `json:"key_path"`
+	// TrustedProxies lists the reverse proxies (IPs or CIDR ranges) allowed
+	// to set X-Forwarded-For / X-Real-IP. When empty, every client is
+	// trusted (legacy behavior, useful behind CDNs).
+	TrustedProxies []string `json:"trusted_proxies"`
 }
 
 // Config represents the configuration information.
