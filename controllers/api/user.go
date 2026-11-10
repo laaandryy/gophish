@@ -202,7 +202,13 @@ func (as *Server) User(w http.ResponseWriter, r *http.Request) {
 		// Note that we don't force the current password to be provided. The
 		// assumption here is that the API key is a proper bearer token proving
 		// authenticated access to the account.
-		existingUser.PasswordChangeRequired = ur.PasswordChangeRequired
+		// Only users with the ModifySystem permission can change the lock
+		// status or the forced password change flag. Otherwise a locked user
+		// could unlock their own account, or skip a required password reset.
+		if hasSystem {
+			existingUser.PasswordChangeRequired = ur.PasswordChangeRequired
+			existingUser.AccountLocked = ur.AccountLocked
+		}
 		if ur.Password != "" {
 			err = auth.CheckPasswordPolicy(ur.Password)
 			if err != nil {
@@ -216,7 +222,6 @@ func (as *Server) User(w http.ResponseWriter, r *http.Request) {
 			}
 			existingUser.Hash = hash
 		}
-		existingUser.AccountLocked = ur.AccountLocked
 		err = models.PutUser(&existingUser)
 		if err != nil {
 			JSONResponse(w, models.Response{Success: false, Message: err.Error()}, http.StatusInternalServerError)

@@ -1,20 +1,18 @@
 # Minify client side assets (JavaScript)
-FROM node:latest AS build-js
-
-RUN npm install gulp gulp-cli -g
+FROM node:20-bookworm AS build-js
 
 WORKDIR /build
 COPY . .
-RUN npm install --only=dev
-RUN gulp
+RUN yarn install --frozen-lockfile
+RUN yarn build
 
 
 # Build Golang binary
-FROM golang:1.15.2 AS build-golang
+FROM golang:1.27-bookworm AS build-golang
 
 WORKDIR /go/src/github.com/gophish/gophish
 COPY . .
-RUN go get -v && go build -v
+RUN go mod download && go build -v
 
 
 # Runtime container

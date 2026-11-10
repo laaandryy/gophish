@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/gophish/gophish/config"
+	"github.com/gophish/gophish/dialer"
 	"github.com/gophish/gophish/models"
 )
 
@@ -102,7 +103,11 @@ func TestSiteImportBaseHref(t *testing.T) {
 		`, ts.URL))))
 	req.Header.Set("Content-Type", "application/json")
 	response := httptest.NewRecorder()
+	// The test server listens on loopback, which must be explicitly allowed
+	orig := dialer.DefaultDialer.AllowedHosts()
+	dialer.SetAllowedHosts([]string{"127.0.0.1"})
 	ctx.apiServer.ImportSite(response, req)
+	dialer.SetAllowedHosts(orig)
 	cs := cloneResponse{}
 	err := json.NewDecoder(response.Body).Decode(&cs)
 	if err != nil {

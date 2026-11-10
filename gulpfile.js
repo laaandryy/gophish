@@ -21,6 +21,8 @@ var gulp = require('gulp'),
 vendorjs = function () {
     return gulp.src([
             vendor_directory + 'jquery.js',
+            vendor_directory + 'jquery-migrate-mute.js',
+            vendor_directory + 'jquery-migrate.min.js',
             vendor_directory + 'bootstrap.min.js',
             vendor_directory + 'moment.min.js',
             vendor_directory + 'papaparse.min.js',

@@ -1,10 +1,12 @@
 package models
 
 import (
+	"archive/zip"
 	"bufio"
+	"bytes"
 	"encoding/base64"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -29,7 +31,7 @@ func (s *ModelsSuite) TestAttachment(c *check.C) {
 		RId:         "1234567",
 	}
 
-	files, err := ioutil.ReadDir("testdata")
+	files, err := os.ReadDir("testdata")
 	if err != nil {
 		log.Fatalf("Failed to open attachment folder 'testdata': %v\n", err)
 	}
@@ -51,15 +53,40 @@ func (s *ModelsSuite) TestAttachment(c *check.C) {
 			c.Assert(a.vanillaFile, check.Not(check.Equals), strings.Contains(fname, "with-vars"))
 
 			// Verfify template was applied as expected
-			tt, err := ioutil.ReadAll(t)
+			tt, err := io.ReadAll(t)
 			if err != nil {
 				log.Fatalf("Failed to parse templated file '%s': %v\n", fname, err)
 			}
 			templatedFile := base64.StdEncoding.EncodeToString(tt)
 			expectedOutput := readFile("testdata/" + strings.TrimSuffix(ff.Name(), filepath.Ext(ff.Name())) + ".templated" + filepath.Ext(ff.Name())) // e.g text-file-with-vars.templated.txt
+			if strings.HasPrefix(string(tt), "PK") {
+				// Office documents are zip archives. The compressed bytes depend
+				// on the Go version, so compare the archive entries instead.
+				expected, err := base64.StdEncoding.DecodeString(expectedOutput)
+				c.Assert(err, check.Equals, nil)
+				c.Assert(zipEntries(c, tt), check.DeepEquals, zipEntries(c, expected))
+				continue
+			}
 			c.Assert(templatedFile, check.Equals, expectedOutput)
 		}
 	}
+}
+
+// zipEntries returns the uncompressed content of every file in a zip archive,
+// keyed by file name.
+func zipEntries(c *check.C, data []byte) map[string]string {
+	r, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	c.Assert(err, check.Equals, nil)
+	entries := map[string]string{}
+	for _, f := range r.File {
+		rc, err := f.Open()
+		c.Assert(err, check.Equals, nil)
+		content, err := io.ReadAll(rc)
+		rc.Close()
+		c.Assert(err, check.Equals, nil)
+		entries[f.Name] = string(content)
+	}
+	return entries
 }
 
 func readFile(fname string) string {
@@ -68,7 +95,7 @@ func readFile(fname string) string {
 		log.Fatalf("Failed to open file '%s': %v\n", fname, err)
 	}
 	reader := bufio.NewReader(f)
-	content, err := ioutil.ReadAll(reader)
+	content, err := io.ReadAll(reader)
 	if err != nil {
 		log.Fatalf("Failed to read file '%s': %v\n", fname, err)
 	}
@@ -79,4 +106,27 @@ func readFile(fname string) string {
 		data = base64.StdEncoding.EncodeToString(content)
 	}
 	return data
+}
+
+// TestAttachmentZipBomb ensures that Office documents which uncompress to
+// more than MaxAttachmentUncompressedSize are rejected.
+func (s *ModelsSuite) TestAttachmentZipBomb(c *check.C) {
+	orig := MaxAttachmentUncompressedSize
+	MaxAttachmentUncompressedSize = 1 << 20
+	defer func() { MaxAttachmentUncompressedSize = orig }()
+
+	buf := new(bytes.Buffer)
+	zw := zip.NewWriter(buf)
+	w, err := zw.Create("word/document.xml")
+	c.Assert(err, check.Equals, nil)
+	_, err = w.Write(bytes.Repeat([]byte("A"), 2<<20))
+	c.Assert(err, check.Equals, nil)
+	c.Assert(zw.Close(), check.Equals, nil)
+
+	a := Attachment{
+		Name:    "bomb.docx",
+		Content: base64.StdEncoding.EncodeToString(buf.Bytes()),
+	}
+	_, err = a.ApplyTemplate(PhishingTemplateContext{})
+	c.Assert(err, check.Equals, ErrAttachmentTooLarge)
 }

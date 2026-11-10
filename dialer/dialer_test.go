@@ -83,3 +83,26 @@ func TestSingleIP(t *testing.T) {
 	}
 	DefaultDialer.SetAllowedHosts(orig)
 }
+
+func TestStrictDialerBlocksLoopback(t *testing.T) {
+	d := &RestrictedDialer{}
+	control := d.StrictDialer().Control
+	for _, addr := range []string{"127.0.0.1:3333", "[::1]:3333", "0.0.0.0:80", "169.254.169.254:80", "[fd00:ec2::254]:80"} {
+		network := "tcp4"
+		if addr[0] == '[' {
+			network = "tcp6"
+		}
+		if err := control(network, addr, nil); err == nil {
+			t.Fatalf("expected %s to be denied by the strict dialer", addr)
+		}
+	}
+	// Local network hosts stay reachable by default
+	if err := control("tcp4", "192.168.1.10:80", nil); err != nil {
+		t.Fatalf("expected local network host to be allowed: %v", err)
+	}
+	// Explicitly allowed loopback hosts are reachable
+	d.SetAllowedHosts([]string{"127.0.0.1"})
+	if err := d.StrictDialer().Control("tcp4", "127.0.0.1:80", nil); err != nil {
+		t.Fatalf("expected allowed loopback host to be reachable: %v", err)
+	}
+}

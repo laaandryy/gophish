@@ -139,10 +139,10 @@ function deleteCampaign() {
         preConfirm: function () {
             return new Promise(function (resolve, reject) {
                 api.campaignId.delete(campaign.id)
-                    .success(function (msg) {
+                    .done(function (msg) {
                         resolve()
                     })
-                    .error(function (data) {
+                    .fail(function (data) {
                         reject(data.responseJSON.message)
                     })
             })
@@ -177,10 +177,10 @@ function completeCampaign() {
         preConfirm: function () {
             return new Promise(function (resolve, reject) {
                 api.campaignId.complete(campaign.id)
-                    .success(function (msg) {
+                    .done(function (msg) {
                         resolve()
                     })
-                    .error(function (data) {
+                    .fail(function (data) {
                         reject(data.responseJSON.message)
                     })
             })
@@ -357,7 +357,7 @@ var renderDevice = function (event_details) {
 
     var browserString = '<div class="timeline-device-browser"><span class="fa fa-stack">' +
         '<i class="fa fa-' + escapeHtml(browserIcon) + ' fa-stack-1x"></i></span> ' +
-        deviceBrowser + ' ' + browserVersion + '</div>'
+        escapeHtml(deviceBrowser) + ' ' + escapeHtml(browserVersion) + '</div>'
 
     detailsString += browserString
     detailsString += '</div>'
@@ -422,7 +422,7 @@ function renderTimeline(data) {
                 if (details.error) {
                     results += '<div class="timeline-event-details"><i class="fa fa-caret-right"></i> View Details</div>'
                     results += '<div class="timeline-event-results">'
-                    results += '<span class="label label-default">Error</span> ' + details.error
+                    results += '<span class="label label-default">Error</span> ' + escapeHtml(details.error)
                     results += '</div>'
                 }
             }
@@ -632,7 +632,7 @@ function createStatusLabel(status, send_date) {
  */
 function poll() {
     api.campaignId.results(campaign.id)
-        .success(function (c) {
+        .done(function (c) {
             campaign = c
             /* Update the timeline */
             var timeline_series_data = []
@@ -723,7 +723,7 @@ function load() {
     campaign.id = window.location.pathname.split('/').slice(-1)[0]
     var use_map = JSON.parse(localStorage.getItem('gophish.use_map'))
     api.campaignId.results(campaign.id)
-        .success(function (c) {
+        .done(function (c) {
             campaign = c
             if (campaign) {
                 $("title").text(c.name + " - Gophish")
@@ -899,7 +899,7 @@ function load() {
                 updateMap(campaign.results)
             }
         })
-        .error(function () {
+        .fail(function () {
             $("#loading").hide()
             errorFlash(" Campaign not found!")
         })
@@ -932,7 +932,7 @@ function report_mail(rid, cid) {
         showLoaderOnConfirm: true
     }).then(function (result) {
         if (result.value){
-            api.campaignId.get(cid).success((function(c) {
+            api.campaignId.get(cid).done((function(c) {
                 report_url = new URL(c.url)
                 report_url.pathname = '/report'
                 report_url.search = "?rid=" + rid 

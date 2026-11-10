@@ -11,6 +11,9 @@
     "url": "https://github.com/gophish/gophish/issues"
   },
   "homepage": "https://getgophish.com",
+  "scripts": {
+    "build": "gulp && webpack --mode production"
+  },
   "devDependencies": {
     "@babel/core": "^7.4.5",
     "@babel/preset-env": "^7.4.5",
@@ -27,8 +30,8 @@
     "gulp-wrap": "^0.15.0",
     "jshint": "^2.13.4",
     "jshint-stylish": "^2.2.1",
-    "webpack": "^4.32.2",
-    "webpack-cli": "^3.3.2"
+    "webpack": "^5.97.1",
+    "webpack-cli": "^5.1.4"
   },
   "dependencies": {
     "zxcvbn": "^4.4.2"

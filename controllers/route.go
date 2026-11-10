@@ -74,8 +74,13 @@ func WithWorker(w worker.Worker) AdminServerOption {
 func NewAdminServer(config config.AdminServer, options ...AdminServerOption) *AdminServer {
 	defaultWorker, _ := worker.New()
 	defaultServer := &http.Server{
-		ReadTimeout: 10 * time.Second,
-		Addr:        config.ListenURL,
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       10 * time.Second,
+		// Some admin requests wait on remote servers (sending a test
+		// email, importing a site), so the write timeout is generous.
+		WriteTimeout: 5 * time.Minute,
+		IdleTimeout:  2 * time.Minute,
+		Addr:         config.ListenURL,
 	}
 	defaultLimiter := ratelimit.NewPostLimiter()
 	as := &AdminServer{
@@ -155,22 +160,40 @@ func (as *AdminServer) registerRoutes() {
 	csrfHandler := csrf.Protect(csrfKey,
 		csrf.FieldName("csrf_token"),
 		csrf.Secure(as.config.UseTLS),
-		csrf.TrustedOrigins(as.config.TrustedOrigins))
+		csrf.ErrorHandler(mid.CSRFFailureHandler))
+	csrfTrustedOrigins, err := mid.CSRFTrustedOrigins(as.config.TrustedOrigins)
+	if err != nil {
+		log.Fatal(err)
+	}
 	adminHandler := csrfHandler(router)
-	adminHandler = mid.Use(adminHandler.ServeHTTP, mid.CSRFExceptions, mid.GetContext, mid.ApplySecurityHeaders)
+	adminHandler = mid.Use(adminHandler.ServeHTTP, csrfTrustedOrigins, mid.CSRFPlaintextHTTP, mid.CSRFExceptions, mid.GetContext, mid.ApplySecurityHeaders)
 
 	// Setup GZIP compression
 	gzipWrapper, _ := gziphandler.NewGzipLevelHandler(gzip.BestCompression)
 	adminHandler = gzipWrapper(adminHandler)
 
 	// Respect X-Forwarded-For and X-Real-IP headers in case we're behind a
-	// reverse proxy.
-	adminHandler = handlers.ProxyHeaders(adminHandler)
+	// reverse proxy. Only trusted proxies may set these headers, otherwise
+	// clients could spoof their IP address and bypass the login rate limit.
+	adminHandler, err = mid.TrustedProxyHeaders(as.config.TrustedProxies, adminHandler)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// Limit the size of request bodies
+	adminHandler = mid.LimitRequestSize(as.config.MaxRequestSize, mid.DefaultAdminMaxRequestSize, adminHandler)
 
 	// Setup logging
 	adminHandler = handlers.CombinedLoggingHandler(log.Writer(), adminHandler)
+
+	// Make sure API keys sent in the query string never reach the logs
+	adminHandler = mid.MoveAPIKeyToHeader(adminHandler)
 	as.server.Handler = adminHandler
 }
+
+// dummyPasswordHash is a bcrypt hash (default cost) compared against when a
+// login is attempted for a username that doesn't exist.
+var dummyPasswordHash, _ = auth.GeneratePasswordHash(auth.GenerateSecureKey(auth.MinPasswordLength))
 
 type templateParams struct {
 	Title        string
@@ -282,6 +305,11 @@ func (as *AdminServer) Settings(w http.ResponseWriter, r *http.Request) {
 			api.JSONResponse(w, msg, http.StatusInternalServerError)
 			return
 		}
+		// Keep the current session valid. Other sessions of this user are
+		// invalidated by the password change.
+		session := ctx.Get(r, "session").(*sessions.Session)
+		mid.SetSessionUser(session, u)
+		session.Save(r, w)
 		api.JSONResponse(w, msg, http.StatusOK)
 	}
 }
@@ -346,8 +374,9 @@ func (as *AdminServer) Impersonate(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		session := ctx.Get(r, "session").(*sessions.Session)
-		session.Values["id"] = u.Id
+		mid.SetSessionUser(session, u)
 		session.Save(r, w)
+		log.Infof("User %s impersonated %s", ctx.Get(r, "user").(models.User).Username, u.Username)
 	}
 	http.Redirect(w, r, "/", http.StatusFound)
 }
@@ -378,6 +407,9 @@ func (as *AdminServer) Login(w http.ResponseWriter, r *http.Request) {
 		u, err := models.GetUserByUsername(username)
 		if err != nil {
 			log.Error(err)
+			// Spend the same time as a real password check so that the
+			// response time doesn't reveal whether the username exists.
+			auth.ValidatePassword(password, dummyPasswordHash)
 			as.handleInvalidLogin(w, r, "Invalid Username/Password")
 			return
 		}
@@ -398,7 +430,7 @@ func (as *AdminServer) Login(w http.ResponseWriter, r *http.Request) {
 			log.Error(err)
 		}
 		// If we've logged in, save the session and redirect to the dashboard
-		session.Values["id"] = u.Id
+		mid.SetSessionUser(session, u)
 		session.Save(r, w)
 		as.nextOrIndex(w, r)
 	}
@@ -464,6 +496,10 @@ func (as *AdminServer) ResetPassword(w http.ResponseWriter, r *http.Request) {
 			getTemplate(w, "reset_password").ExecuteTemplate(w, "base", params)
 			return
 		}
+		// Keep the current session valid. Other sessions of this user are
+		// invalidated by the password change.
+		mid.SetSessionUser(session, u)
+		session.Save(r, w)
 		// TODO: We probably want to flash a message here that the password was
 		// changed successfully. The problem is that when the user resets their
 		// password on first use, they will see two flashes on the dashboard-
