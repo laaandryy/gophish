@@ -12,4 +12,4 @@ CREATE TABLE IF NOT EXISTS "mail_logs" (
 
 -- +goose Down
 -- SQL section 'Down' is executed when this migration is rolled back
-DROP TABLE "mail_logs"
+DROP TABLE "mail_logs";

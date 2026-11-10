@@ -1,6 +1,8 @@
 package models
 
 import (
+	"gorm.io/gorm"
+	"path/filepath"
 	"testing"
 
 	"github.com/gophish/gophish/config"
@@ -32,18 +34,18 @@ func (s *ModelsSuite) SetUpSuite(c *check.C) {
 func (s *ModelsSuite) TearDownTest(c *check.C) {
 	// Clear database tables between each test. If new tables are
 	// used in this test suite they will need to be cleaned up here.
-	db.Delete(Group{})
-	db.Delete(Target{})
-	db.Delete(GroupTarget{})
-	db.Delete(SMTP{})
-	db.Delete(Page{})
-	db.Delete(Result{})
-	db.Delete(MailLog{})
-	db.Delete(Campaign{})
+	db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&Group{})
+	db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&Target{})
+	db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&GroupTarget{})
+	db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&SMTP{})
+	db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&Page{})
+	db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&Result{})
+	db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&MailLog{})
+	db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&Campaign{})
 
 	// Reset users table to default state.
-	db.Not("id", 1).Delete(User{})
-	db.Model(User{}).Update("username", "admin")
+	db.Where("id <> ?", 1).Delete(&User{})
+	db.Session(&gorm.Session{AllowGlobalUpdate: true}).Model(&User{}).Update("username", "admin")
 }
 
 func (s *ModelsSuite) createCampaignDependencies(ch *check.C, optional ...string) Campaign {
@@ -117,23 +119,31 @@ func setupBenchmark(b *testing.B) {
 }
 
 func tearDownBenchmark(b *testing.B) {
-	err := db.Close()
+	sqlDB, err := db.DB()
+	if err == nil {
+		err = sqlDB.Close()
+	}
 	if err != nil {
 		b.Fatalf("error closing database: %v", err)
 	}
 }
 
 func resetBenchmark(b *testing.B) {
-	db.Delete(Group{})
-	db.Delete(Target{})
-	db.Delete(GroupTarget{})
-	db.Delete(SMTP{})
-	db.Delete(Page{})
-	db.Delete(Result{})
-	db.Delete(MailLog{})
-	db.Delete(Campaign{})
+	db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&Group{})
+	db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&Target{})
+	db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&GroupTarget{})
+	db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&SMTP{})
+	db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&Page{})
+	db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&Result{})
+	db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&MailLog{})
+	db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&Campaign{})
 
 	// Reset users table to default state.
-	db.Not("id", 1).Delete(User{})
-	db.Model(User{}).Update("username", "admin")
+	db.Where("id <> ?", 1).Delete(&User{})
+	db.Session(&gorm.Session{AllowGlobalUpdate: true}).Model(&User{}).Update("username", "admin")
+}
+
+func (s *ModelsSuite) TestMigrationsDir(c *check.C) {
+	c.Assert(migrationsDir("../db/db_sqlite3"), check.Equals, filepath.Join("../db/db_sqlite3", "migrations"))
+	c.Assert(migrationsDir("../db/db_sqlite3/migrations/"), check.Equals, "../db/db_sqlite3/migrations/")
 }

@@ -103,8 +103,7 @@ func (im *IMAP) Validate() error {
 // GetIMAP returns the IMAP server owned by the given user.
 func GetIMAP(uid int64) ([]IMAP, error) {
 	im := []IMAP{}
-	count := 0
-	err := db.Where("user_id=?", uid).Find(&im).Count(&count).Error
+	err := db.Where("user_id=?", uid).Find(&im).Error
 
 	if err != nil {
 		log.Error(err)
@@ -129,7 +128,7 @@ func PostIMAP(im *IMAP, uid int64) error {
 	}
 
 	// Insert new settings into the DB
-	err = db.Save(im).Error
+	err = db.Create(im).Error
 	if err != nil {
 		log.Error("Unable to save to database: ", err.Error())
 	}
@@ -146,7 +145,7 @@ func DeleteIMAP(uid int64) error {
 }
 
 func SuccessfulLogin(im *IMAP) error {
-	err := db.Model(&im).Where("user_id = ?", im.UserId).Update("last_login", time.Now().UTC()).Error
+	err := db.Model(im).Where("user_id = ?", im.UserId).Update("last_login", time.Now().UTC()).Error
 	if err != nil {
 		log.Error("Unable to update database: ", err.Error())
 	}
