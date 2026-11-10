@@ -8,7 +8,7 @@ RUN yarn build
 
 
 # Build Golang binary
-FROM golang:1.22-bookworm AS build-golang
+FROM golang:1.27-bookworm AS build-golang
 
 WORKDIR /go/src/github.com/gophish/gophish
 COPY . .
