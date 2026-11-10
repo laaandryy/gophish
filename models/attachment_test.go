@@ -1,7 +1,9 @@
 package models
 
 import (
+	"archive/zip"
 	"bufio"
+	"bytes"
 	"encoding/base64"
 	"fmt"
 	"io"
@@ -57,9 +59,34 @@ func (s *ModelsSuite) TestAttachment(c *check.C) {
 			}
 			templatedFile := base64.StdEncoding.EncodeToString(tt)
 			expectedOutput := readFile("testdata/" + strings.TrimSuffix(ff.Name(), filepath.Ext(ff.Name())) + ".templated" + filepath.Ext(ff.Name())) // e.g text-file-with-vars.templated.txt
+			if strings.HasPrefix(string(tt), "PK") {
+				// Office documents are zip archives. The compressed bytes depend
+				// on the Go version, so compare the archive entries instead.
+				expected, err := base64.StdEncoding.DecodeString(expectedOutput)
+				c.Assert(err, check.Equals, nil)
+				c.Assert(zipEntries(c, tt), check.DeepEquals, zipEntries(c, expected))
+				continue
+			}
 			c.Assert(templatedFile, check.Equals, expectedOutput)
 		}
 	}
+}
+
+// zipEntries returns the uncompressed content of every file in a zip archive,
+// keyed by file name.
+func zipEntries(c *check.C, data []byte) map[string]string {
+	r, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	c.Assert(err, check.Equals, nil)
+	entries := map[string]string{}
+	for _, f := range r.File {
+		rc, err := f.Open()
+		c.Assert(err, check.Equals, nil)
+		content, err := io.ReadAll(rc)
+		rc.Close()
+		c.Assert(err, check.Equals, nil)
+		entries[f.Name] = string(content)
+	}
+	return entries
 }
 
 func readFile(fname string) string {
