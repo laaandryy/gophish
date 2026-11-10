@@ -67,6 +67,12 @@ CKEDITOR.editorConfig = function (config) {
 	config.removeDialogTabs = 'image:advanced;link:advanced;link:target';
 	config.fullPage = true;
 	config.allowedContent = true;
+	// Don't let the editor call home to ckeditor.com on every load.
+	config.versionCheck = false;
+
+	// The autocomplete feature (used for template variables) ships as
+	// separate plugins since CKEditor 4.12; load them explicitly.
+	config.extraPlugins = 'autocomplete,textmatch,textwatcher';
 	config.startupMode = "source";
 	config.startupShowBorders = false;
 };
