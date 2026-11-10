@@ -1,12 +1,10 @@
 # Minify client side assets (JavaScript)
 FROM node:20-bookworm AS build-js
 
-RUN npm install gulp gulp-cli -g
-
 WORKDIR /build
 COPY . .
-RUN npm install --only=dev
-RUN gulp
+RUN yarn install --frozen-lockfile
+RUN yarn build
 
 
 # Build Golang binary

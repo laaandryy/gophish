@@ -93,7 +93,7 @@ var statsMapping = {
 function deleteCampaign(idx) {
     if (confirm("Delete " + campaigns[idx].name + "?")) {
         api.campaignId.delete(campaigns[idx].id)
-            .success(function (data) {
+            .done(function (data) {
                 successFlash(data.message)
                 location.reload()
             })
@@ -290,7 +290,7 @@ $(document).ready(function () {
         }
     })
     api.campaigns.summary()
-        .success(function (data) {
+        .done(function (data) {
             $("#loading").hide()
             campaigns = data.campaigns
             if (campaigns.length > 0) {
@@ -366,7 +366,7 @@ $(document).ready(function () {
                 $("#emptyMessage").show()
             }
         })
-        .error(function () {
+        .fail(function () {
             errorFlash("Error fetching campaigns")
         })
 })
