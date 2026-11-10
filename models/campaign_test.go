@@ -2,6 +2,7 @@ package models
 
 import (
 	"fmt"
+	"gorm.io/gorm"
 	"testing"
 	"time"
 
@@ -227,9 +228,9 @@ func BenchmarkCampaign100(b *testing.B) {
 			b.Fatalf("error posting campaign: %v", err)
 		}
 		b.StopTimer()
-		db.Delete(Result{})
-		db.Delete(MailLog{})
-		db.Delete(Campaign{})
+		db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&Result{})
+		db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&MailLog{})
+		db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&Campaign{})
 	}
 	tearDownBenchmark(b)
 }
@@ -252,9 +253,9 @@ func BenchmarkCampaign1000(b *testing.B) {
 			b.Fatalf("error posting campaign: %v", err)
 		}
 		b.StopTimer()
-		db.Delete(Result{})
-		db.Delete(MailLog{})
-		db.Delete(Campaign{})
+		db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&Result{})
+		db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&MailLog{})
+		db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&Campaign{})
 	}
 	tearDownBenchmark(b)
 }
@@ -277,9 +278,9 @@ func BenchmarkCampaign10000(b *testing.B) {
 			b.Fatalf("error posting campaign: %v", err)
 		}
 		b.StopTimer()
-		db.Delete(Result{})
-		db.Delete(MailLog{})
-		db.Delete(Campaign{})
+		db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&Result{})
+		db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&MailLog{})
+		db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&Campaign{})
 	}
 	tearDownBenchmark(b)
 }

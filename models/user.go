@@ -18,33 +18,55 @@ type User struct {
 	Username               string    `json:"username" sql:"not null;unique"`
 	Hash                   string    `json:"-"`
 	ApiKey                 string    `json:"api_key" sql:"not null;unique"`
-	Role                   Role      `json:"role" gorm:"association_autoupdate:false;association_autocreate:false"`
+	Role                   Role      `json:"role" gorm:"-"`
 	RoleID                 int64     `json:"-"`
 	PasswordChangeRequired bool      `json:"password_change_required"`
 	AccountLocked          bool      `json:"account_locked"`
 	LastLogin              time.Time `json:"last_login"`
 }
 
+// loadRole fills in the role of the user.
+func (u *User) loadRole() error {
+	return db.Where("id = ?", u.RoleID).First(&u.Role).Error
+}
+
 // GetUser returns the user that the given id corresponds to. If no user is found, an
 // error is thrown.
 func GetUser(id int64) (User, error) {
 	u := User{}
-	err := db.Preload("Role").Where("id=?", id).First(&u).Error
+	err := db.Where("id=?", id).First(&u).Error
+	if err != nil {
+		return u, err
+	}
+	err = u.loadRole()
 	return u, err
 }
 
 // GetUsers returns the users registered in Gophish
 func GetUsers() ([]User, error) {
 	us := []User{}
-	err := db.Preload("Role").Find(&us).Error
-	return us, err
+	err := db.Find(&us).Error
+	if err != nil {
+		return us, err
+	}
+	for i := range us {
+		err = us[i].loadRole()
+		if err != nil {
+			return us, err
+		}
+	}
+	return us, nil
 }
 
 // GetUserByAPIKey returns the user that the given API Key corresponds to. If no user is found, an
 // error is thrown.
 func GetUserByAPIKey(key string) (User, error) {
 	u := User{}
-	err := db.Preload("Role").Where("api_key = ?", key).First(&u).Error
+	err := db.Where("api_key = ?", key).First(&u).Error
+	if err != nil {
+		return u, err
+	}
+	err = u.loadRole()
 	return u, err
 }
 
@@ -52,7 +74,11 @@ func GetUserByAPIKey(key string) (User, error) {
 // error is thrown.
 func GetUserByUsername(username string) (User, error) {
 	u := User{}
-	err := db.Preload("Role").Where("username = ?", username).First(&u).Error
+	err := db.Where("username = ?", username).First(&u).Error
+	if err != nil {
+		return u, err
+	}
+	err = u.loadRole()
 	return u, err
 }
 
@@ -70,7 +96,7 @@ func EnsureEnoughAdmins() error {
 	if err != nil {
 		return err
 	}
-	var adminCount int
+	var adminCount int64
 	err = db.Model(&User{}).Where("role_id=?", role.ID).Count(&adminCount).Error
 	if err != nil {
 		return err

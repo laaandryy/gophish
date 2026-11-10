@@ -14,9 +14,11 @@ Gophish: Open-Source Phishing Toolkit
 Installation of Gophish is dead-simple - just download and extract the zip containing the [release for your system](https://github.com/gophish/gophish/releases/), and run the binary. Gophish has binary releases for Windows, Mac, and Linux platforms.
 
 ### Building From Source
-**If you are building from source, please note that Gophish requires Go v1.10 or above!**
+**If you are building from source, please note that Gophish requires Go v1.26 or above!**
 
 To build Gophish from source, simply run ```git clone https://github.com/gophish/gophish.git``` and ```cd``` into the project source directory. Then, run ```go build```. After this, you should have a binary called ```gophish``` in the current directory.
+
+The front-end assets are built with Node.js. If you change anything under ```static/js/src``` or the stylesheets, run ```yarn install``` followed by ```yarn build``` to regenerate the bundles in ```static/js/dist``` and ```static/css/dist```.
 
 ### Docker
 You can also use Gophish via the official Docker container [here](https://hub.docker.com/r/gophish/gophish/).
@@ -29,6 +31,14 @@ time="2020-07-29T01:24:08Z" level=info msg="Please login with the username admin
 ```
 
 Releases of Gophish prior to v0.10.1 have a default username of `admin` and password of `gophish`.
+
+### Configuration
+
+The `config.json` file supports a few options that are useful when Gophish runs behind a reverse proxy or in a hardened environment:
+
+- `admin_server.trusted_proxies` / `phish_server.trusted_proxies`: list of proxy IPs (or CIDRs, `*` for all) allowed to set the `X-Forwarded-For` and `X-Real-IP` headers. The admin server trusts only loopback by default, so set this if a remote proxy terminates connections, otherwise the login rate limit sees the proxy's address.
+- `admin_server.trusted_origins`: extra origins (e.g. `admin.example.com` or `https://admin.example.com`) accepted by the CSRF protection. Add the public host name here if the proxy does not forward the original `Host` header, or form submissions are rejected with a 403.
+- `admin_server.max_request_size` / `phish_server.max_request_size`: maximum request body size in bytes (default 50 MB for the admin server, 2 MB for the phishing server). Larger requests get a 413 response.
 
 ### Documentation
 

@@ -89,13 +89,13 @@ func (m *MailLog) Backoff(reason error) error {
 // Unlock removes the processing flag so the maillog can be processed again
 func (m *MailLog) Unlock() error {
 	m.Processing = false
-	return db.Save(&m).Error
+	return db.Save(m).Error
 }
 
 // Lock sets the processing flag so that other processes cannot modify the maillog
 func (m *MailLog) Lock() error {
 	m.Processing = true
-	return db.Save(&m).Error
+	return db.Save(m).Error
 }
 
 // Error sets the error status on the models.Result that the
@@ -300,7 +300,7 @@ func LockMailLogs(ms []*MailLog, lock bool) error {
 // in the database. This is intended to be called when Gophish is started
 // so that any previously locked maillogs can resume processing.
 func UnlockAllMailLogs() error {
-	return db.Model(&MailLog{}).Update("processing", false).Error
+	return db.Model(&MailLog{}).Where("processing = ?", true).Update("processing", false).Error
 }
 
 var maxBigInt = big.NewInt(math.MaxInt64)
