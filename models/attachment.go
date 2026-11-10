@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"encoding/base64"
+	"errors"
 	"io"
 	"net/url"
 	"path/filepath"
@@ -45,6 +46,14 @@ func (a Attachment) Validate() error {
 	return err
 }
 
+// MaxAttachmentUncompressedSize is the maximum total uncompressed size of the
+// files in an Office document attachment (200 MB).
+var MaxAttachmentUncompressedSize int64 = 200 << 20
+
+// ErrAttachmentTooLarge is returned when an Office document attachment
+// uncompresses to more than MaxAttachmentUncompressedSize.
+var ErrAttachmentTooLarge = errors.New("attachment is too large once uncompressed")
+
 // ApplyTemplate parses different attachment files and applies the supplied phishing template.
 func (a *Attachment) ApplyTemplate(ptx PhishingTemplateContext) (io.Reader, error) {
 
@@ -69,7 +78,10 @@ func (a *Attachment) ApplyTemplate(ptx PhishingTemplateContext) (io.Reader, erro
 		// Zip archives require random access for reading, so it's hard to stream bytes. Solution seems to be to use a buffer.
 		// See https://stackoverflow.com/questions/16946978/how-to-unzip-io-readcloser
 		b := new(bytes.Buffer)
-		b.ReadFrom(decodedAttachment)
+		_, err := b.ReadFrom(decodedAttachment)
+		if err != nil {
+			return nil, err
+		}
 		zipReader, err := zip.NewReader(bytes.NewReader(b.Bytes()), int64(b.Len())) // Create a new zip reader from the file
 
 		if err != nil {
@@ -83,15 +95,21 @@ func (a *Attachment) ApplyTemplate(ptx PhishingTemplateContext) (io.Reader, erro
 		// ii. Apply the template to it
 		// iii. Add the templated content to a new zip Word archive
 		a.vanillaFile = true
+		// Guard against zip bombs: limit the total uncompressed size
+		remaining := MaxAttachmentUncompressedSize
 		for _, zipFile := range zipReader.File {
 			ff, err := zipFile.Open()
 			if err != nil {
 				return nil, err
 			}
 			defer ff.Close()
-			contents, err := io.ReadAll(ff)
+			contents, err := io.ReadAll(io.LimitReader(ff, remaining+1))
 			if err != nil {
 				return nil, err
+			}
+			remaining -= int64(len(contents))
+			if remaining < 0 {
+				return nil, ErrAttachmentTooLarge
 			}
 			subFileExtension := filepath.Ext(zipFile.Name)
 			var tFile string

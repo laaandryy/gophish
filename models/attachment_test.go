@@ -107,3 +107,26 @@ func readFile(fname string) string {
 	}
 	return data
 }
+
+// TestAttachmentZipBomb ensures that Office documents which uncompress to
+// more than MaxAttachmentUncompressedSize are rejected.
+func (s *ModelsSuite) TestAttachmentZipBomb(c *check.C) {
+	orig := MaxAttachmentUncompressedSize
+	MaxAttachmentUncompressedSize = 1 << 20
+	defer func() { MaxAttachmentUncompressedSize = orig }()
+
+	buf := new(bytes.Buffer)
+	zw := zip.NewWriter(buf)
+	w, err := zw.Create("word/document.xml")
+	c.Assert(err, check.Equals, nil)
+	_, err = w.Write(bytes.Repeat([]byte("A"), 2<<20))
+	c.Assert(err, check.Equals, nil)
+	c.Assert(zw.Close(), check.Equals, nil)
+
+	a := Attachment{
+		Name:    "bomb.docx",
+		Content: base64.StdEncoding.EncodeToString(buf.Bytes()),
+	}
+	_, err = a.ApplyTemplate(PhishingTemplateContext{})
+	c.Assert(err, check.Equals, ErrAttachmentTooLarge)
+}

@@ -6,8 +6,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/gophish/gophish/dialer"
@@ -15,6 +17,16 @@ import (
 	"github.com/gophish/gophish/models"
 	"github.com/gophish/gophish/util"
 	"github.com/jordan-wright/email"
+)
+
+const (
+	// importSiteTimeout is the maximum time allowed to fetch a page with
+	// the "Import Site" feature.
+	importSiteTimeout = 30 * time.Second
+
+	// maxImportSiteSize is the maximum size of a page fetched with the
+	// "Import Site" feature (20 MB).
+	maxImportSiteSize = 20 << 20
 )
 
 type cloneRequest struct {
@@ -123,12 +135,15 @@ func (as *Server) ImportSite(w http.ResponseWriter, r *http.Request) {
 			InsecureSkipVerify: true,
 		},
 	}
-	client := &http.Client{Transport: tr}
+	client := &http.Client{Transport: tr, Timeout: importSiteTimeout}
 	resp, err := client.Get(cr.URL)
 	if err != nil {
 		JSONResponse(w, models.Response{Success: false, Message: err.Error()}, http.StatusBadRequest)
 		return
 	}
+	defer resp.Body.Close()
+	// Don't load arbitrarily large pages in memory
+	resp.Body = io.NopCloser(io.LimitReader(resp.Body, maxImportSiteSize))
 	// Insert the base href tag to better handle relative resources
 	d, err := goquery.NewDocumentFromResponse(resp)
 	if err != nil {

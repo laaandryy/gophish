@@ -59,9 +59,11 @@ type PhishingServer struct {
 // provided options applied.
 func NewPhishingServer(config config.PhishServer, options ...PhishingServerOption) *PhishingServer {
 	defaultServer := &http.Server{
-		ReadTimeout:  10 * time.Second,
-		WriteTimeout: 10 * time.Second,
-		Addr:         config.ListenURL,
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       10 * time.Second,
+		WriteTimeout:      10 * time.Second,
+		IdleTimeout:       time.Minute,
+		Addr:              config.ListenURL,
 	}
 	ps := &PhishingServer{
 		server: defaultServer,
@@ -135,6 +137,9 @@ func (ps *PhishingServer) registerRoutes() {
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	// Limit the size of request bodies
+	phishHandler = mid.LimitRequestSize(ps.config.MaxRequestSize, mid.DefaultPhishMaxRequestSize, phishHandler)
 
 	// Setup logging
 	phishHandler = handlers.CombinedLoggingHandler(log.Writer(), phishHandler)

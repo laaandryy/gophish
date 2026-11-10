@@ -43,10 +43,6 @@ jobs:
   vulncheck:
     name: Vulnerability check
     runs-on: ubuntu-latest
-    # Informational for now: gorilla/csrf 1.6.2 is a known finding that is
-    # kept on purpose (upgrading needs trusted_origins behind proxies).
-    # Remove this line once it is upgraded so new findings fail the build.
-    continue-on-error: true
     steps:
     - uses: actions/checkout@v4
 

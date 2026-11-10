@@ -20,6 +20,9 @@ type AdminServer struct {
 	// to set X-Forwarded-For / X-Real-IP. Defaults to loopback only. Use
 	// "*" to trust every client (legacy behavior, not recommended).
 	TrustedProxies []string `json:"trusted_proxies"`
+	// MaxRequestSize is the maximum size of a request body, in bytes.
+	// Defaults to 50 MB.
+	MaxRequestSize int64 `json:"max_request_size"`
 }
 
 // PhishServer represents the Phish server configuration details
@@ -32,6 +35,9 @@ type PhishServer struct {
 	// to set X-Forwarded-For / X-Real-IP. When empty, every client is
 	// trusted (legacy behavior, useful behind CDNs).
 	TrustedProxies []string `json:"trusted_proxies"`
+	// MaxRequestSize is the maximum size of a request body, in bytes.
+	// Defaults to 2 MB.
+	MaxRequestSize int64 `json:"max_request_size"`
 }
 
 // Config represents the configuration information.

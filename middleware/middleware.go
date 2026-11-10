@@ -47,7 +47,8 @@ func GetContext(handler http.Handler) http.HandlerFunc {
 		// Parse the request form
 		err := r.ParseForm()
 		if err != nil {
-			http.Error(w, "Error parsing request", http.StatusInternalServerError)
+			http.Error(w, "Error parsing request", http.StatusBadRequest)
+			return
 		}
 		// Set the context appropriately here.
 		// Set the session

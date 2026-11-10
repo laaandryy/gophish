@@ -74,8 +74,13 @@ func WithWorker(w worker.Worker) AdminServerOption {
 func NewAdminServer(config config.AdminServer, options ...AdminServerOption) *AdminServer {
 	defaultWorker, _ := worker.New()
 	defaultServer := &http.Server{
-		ReadTimeout: 10 * time.Second,
-		Addr:        config.ListenURL,
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       10 * time.Second,
+		// Some admin requests wait on remote servers (sending a test
+		// email, importing a site), so the write timeout is generous.
+		WriteTimeout: 5 * time.Minute,
+		IdleTimeout:  2 * time.Minute,
+		Addr:         config.ListenURL,
 	}
 	defaultLimiter := ratelimit.NewPostLimiter()
 	as := &AdminServer{
@@ -155,9 +160,10 @@ func (as *AdminServer) registerRoutes() {
 	csrfHandler := csrf.Protect(csrfKey,
 		csrf.FieldName("csrf_token"),
 		csrf.Secure(as.config.UseTLS),
-		csrf.TrustedOrigins(as.config.TrustedOrigins))
+		csrf.TrustedOrigins(as.config.TrustedOrigins),
+		csrf.ErrorHandler(mid.CSRFFailureHandler))
 	adminHandler := csrfHandler(router)
-	adminHandler = mid.Use(adminHandler.ServeHTTP, mid.CSRFExceptions, mid.GetContext, mid.ApplySecurityHeaders)
+	adminHandler = mid.Use(adminHandler.ServeHTTP, mid.CSRFPlaintextHTTP, mid.CSRFExceptions, mid.GetContext, mid.ApplySecurityHeaders)
 
 	// Setup GZIP compression
 	gzipWrapper, _ := gziphandler.NewGzipLevelHandler(gzip.BestCompression)
@@ -170,6 +176,9 @@ func (as *AdminServer) registerRoutes() {
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	// Limit the size of request bodies
+	adminHandler = mid.LimitRequestSize(as.config.MaxRequestSize, mid.DefaultAdminMaxRequestSize, adminHandler)
 
 	// Setup logging
 	adminHandler = handlers.CombinedLoggingHandler(log.Writer(), adminHandler)
