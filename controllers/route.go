@@ -160,10 +160,13 @@ func (as *AdminServer) registerRoutes() {
 	csrfHandler := csrf.Protect(csrfKey,
 		csrf.FieldName("csrf_token"),
 		csrf.Secure(as.config.UseTLS),
-		csrf.TrustedOrigins(as.config.TrustedOrigins),
 		csrf.ErrorHandler(mid.CSRFFailureHandler))
+	csrfTrustedOrigins, err := mid.CSRFTrustedOrigins(as.config.TrustedOrigins)
+	if err != nil {
+		log.Fatal(err)
+	}
 	adminHandler := csrfHandler(router)
-	adminHandler = mid.Use(adminHandler.ServeHTTP, mid.CSRFPlaintextHTTP, mid.CSRFExceptions, mid.GetContext, mid.ApplySecurityHeaders)
+	adminHandler = mid.Use(adminHandler.ServeHTTP, csrfTrustedOrigins, mid.CSRFPlaintextHTTP, mid.CSRFExceptions, mid.GetContext, mid.ApplySecurityHeaders)
 
 	// Setup GZIP compression
 	gzipWrapper, _ := gziphandler.NewGzipLevelHandler(gzip.BestCompression)
@@ -172,7 +175,7 @@ func (as *AdminServer) registerRoutes() {
 	// Respect X-Forwarded-For and X-Real-IP headers in case we're behind a
 	// reverse proxy. Only trusted proxies may set these headers, otherwise
 	// clients could spoof their IP address and bypass the login rate limit.
-	adminHandler, err := mid.TrustedProxyHeaders(as.config.TrustedProxies, adminHandler)
+	adminHandler, err = mid.TrustedProxyHeaders(as.config.TrustedProxies, adminHandler)
 	if err != nil {
 		log.Fatal(err)
 	}
